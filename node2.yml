@@ -1,0 +1,30 @@
+node:
+  keyspath: keys-node-2
+  addr: 0.0.0.0:2001
+  peers:
+    - addr: 0.0.0.0:2000
+      pubkeydir: keys-node-1
+    - addr: 0.0.0.0:2002
+      pubkeydir: keys-node-3
+    - addr: 0.0.0.0:2003
+      pubkeydir: keys-node-4
+  rounds:
+    paceMs: 2000
+    collect:
+      max_messages: 200
+      duration: 500
+    exchange:
+      max_messages: 200
+      duration: 500
+  reconnect: 5
+store:
+  host: 0.0.0.0:5050
+opencensus:
+  prometheus:
+    nodelabel: node-2
+    port: 8889
+  jaeger:
+    nodeLabel: node-2
+    port: 6832
+logging:
+  level: debug

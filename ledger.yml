@@ -1,0 +1,13 @@
+ledger:
+  host: 0.0.0.0:5050
+db:
+  path: /tmp/badger
+opencensus:
+  prometheus:
+    nodelabel: ledger-1
+    port: 10500
+  jaeger:
+    nodeLabel: ledger-a
+    port: 11500
+logging:
+  level: debug
