@@ -1,12 +1,12 @@
 node:
   keyspath: keys-node-3
-  addr: 0.0.0.0:2002
+  addr: 0.0.0.0:20002
   peers:
-    - addr: 0.0.0.0:2000
+    - addr: 0.0.0.0:20000
       pubkeydir: keys-node-1
-    - addr: 0.0.0.0:2001
+    - addr: 0.0.0.0:20001
       pubkeydir: keys-node-2
-    - addr: 0.0.0.0:2003
+    - addr: 0.0.0.0:20003
       pubkeydir: keys-node-4
   rounds:
     paceMs: 2000

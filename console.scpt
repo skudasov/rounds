@@ -9,7 +9,7 @@ end full_screen
 
 tell application "iTerm"
     create window with default profile
-      set project_dir to "/Users/a1/GolandProjects/rounds"
+      set project_dir to POSIX path of ((path to me as text) & "::")
       set db_dir to "/tmp/badger"
     tell first session of current tab of current window
       set name to "Ledger"

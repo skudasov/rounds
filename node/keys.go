@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"time"
 )
 
 const (
@@ -33,6 +34,8 @@ func WriteKeyPairIfNotExists(c *Config) {
 		if err := ioutil.WriteFile(path.Join(c.Node.Keyspath, pubKeyFile), []byte(pubPem), os.ModePerm); err != nil {
 			log.Fatal(err)
 		}
+		log.Printf("waiting for all nodes to generate keypairs")
+		time.Sleep(5 * time.Second)
 	}
 }
 
