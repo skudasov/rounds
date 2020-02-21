@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/json"
-	"github.com/prometheus/common/log"
 	"math/big"
 	"rounds/logger"
 	"time"
@@ -115,7 +114,7 @@ func (n *Node) Commit(ctx context.Context, b BlockData) error {
 func (n *Node) LoadPeerPublicKeys() {
 	keys := make([]*ecdsa.PublicKey, 0)
 	for _, pubKeyPem := range n.peers {
-		log.Infof("pub key loaded from: %s", pubKeyPem.PubKeyDir)
+		n.log.Infof("pub key loaded from: %s", pubKeyPem.PubKeyDir)
 		pubKey := LoadPublicKey(pubKeyPem.PubKeyDir)
 		keys = append(keys, pubKey)
 	}
@@ -133,17 +132,17 @@ func (n *Node) GetAddr() string {
 // VerifyMessageTrusted gets signature from message and check if it's any known peer message
 // by default ecdsa marshal signature in asn1 format
 func (n *Node) VerifyMessageTrusted(signature []byte) bool {
-	log.Info("verifying message")
+	n.log.Info("verifying message")
 	for _, pubKey := range n.peersPublicKeys {
 		hasher := md5.New()
 		if _, err := hasher.Write(DummyHashData); err != nil {
-			log.Error(err)
+			n.log.Error(err)
 		}
 		var esig struct {
 			R, S *big.Int
 		}
 		if _, err := asn1.Unmarshal(signature, &esig); err != nil {
-			log.Error(err)
+			n.log.Error(err)
 			continue
 		}
 		verified := ecdsa.Verify(pubKey, hasher.Sum(nil), esig.R, esig.S)
@@ -158,27 +157,27 @@ func (n *Node) VerifyMessageTrusted(signature []byte) bool {
 func (n *Node) Sign(data []byte) []byte {
 	h := md5.New()
 	if _, err := h.Write(data); err != nil {
-		log.Fatal(err)
+		n.log.Fatal(err)
 	}
 	signhash := h.Sum(nil)
 	sign, err := n.privateKey.Sign(rand.Reader, signhash, nil)
 	if err != nil {
-		log.Fatal(err)
+		n.log.Fatal(err)
 	}
 	return sign
 }
 
 // ConnectPeer connects to peer, if peer is offline nil the connection so it can be reconnected by other goroutine
 func (n *Node) ConnectPeer(addr string) {
-	log.Infof("connecting to peer: %s", addr)
+	n.log.Infof("connecting to peer: %s", addr)
 	conn, err := tls.Dial(DefaultNetworkProto, addr, n.clientTlsCtx)
 	if err != nil {
-		log.Errorf("failed to connect peer: %s", addr)
+		n.log.Errorf("failed to connect peer: %s", addr)
 		n.client.Conns[addr] = nil
 		return
 	}
 	n.client.Conns[addr] = conn
-	log.Infof("[ %s ] connected to %s", n.Addr, addr)
+	n.log.Infof("[ %s ] connected to %s", n.Addr, addr)
 }
 
 // ConnectPeers connect to peers from config, reconnect if connection is nil
@@ -190,7 +189,7 @@ func (n *Node) ConnectPeers() {
 		time.Sleep(time.Duration(n.Reconnect) * time.Second)
 		for addr, c := range n.client.Conns {
 			if c == nil {
-				log.Infof("reconnecting to peer: %s", addr)
+				n.log.Infof("reconnecting to peer: %s", addr)
 				n.ConnectPeer(addr)
 			}
 		}
@@ -205,8 +204,8 @@ func (n *Node) Schedule(cfg *Config) {
 		wait := time.Duration(cfg.Node.Rounds.PaceMs) * time.Millisecond
 		startTime := ts.Truncate(wait).Add(wait)
 		syncNodeWaitBeforeRoundStart := startTime.Sub(ts)
-		log.Infof("round start time: %s", startTime.String())
-		log.Infof("sync wait for: %.2f ms", float64(syncNodeWaitBeforeRoundStart/time.Millisecond))
+		n.log.Infof("round start time: %s", startTime.String())
+		n.log.Infof("sync wait for: %.2f ms", float64(syncNodeWaitBeforeRoundStart/time.Millisecond))
 		time.Sleep(syncNodeWaitBeforeRoundStart)
 		// event will be dispatched every N seconds on every node if ntpd is working
 		cons.GetStartChan() <- struct{}{}
@@ -224,7 +223,7 @@ func (n *Node) Processing() {
 			// Send pulses to all
 			ctx, _ := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
 			if err := cons.SendPulses(ctx, n); err != nil {
-				log.Error(err)
+				n.log.Error(err)
 			}
 			cons.ReceivePulses(ctx, n)
 			<-ctx.Done()
@@ -232,7 +231,7 @@ func (n *Node) Processing() {
 			// After timeout send vectors to all
 			ctx2, _ := context.WithTimeout(context.Background(), time.Duration(cons.GetExchangeDuration())*time.Millisecond)
 			if err := cons.SendVectors(ctx2, n); err != nil {
-				log.Error(err)
+				n.log.Error(err)
 			}
 			cons.ReceiveVectors(ctx2, n)
 			<-ctx2.Done()
@@ -249,32 +248,32 @@ func (n *Node) Processing() {
 func (n *Node) ReceiveLoop() {
 	ln, err := tls.Listen("tcp", n.Addr, n.srvTlsCtx)
 	if err != nil {
-		log.Fatal(err)
+		n.log.Fatal(err)
 	}
 
 	defer ln.Close()
-	log.Infof("Node started on %s", n.Addr)
+	n.log.Infof("Node started on %s", n.Addr)
 	for {
-		log.Infof("entering receiving loop")
+		n.log.Infof("entering receiving loop")
 		conn, err := ln.Accept()
 		if err != nil {
-			log.Errorf("server: accept: %s", err)
+			n.log.Errorf("server: accept: %s", err)
 			break
 		}
 		defer conn.Close()
-		log.Infof("server: accepted from %s", conn.RemoteAddr())
+		n.log.Infof("server: accepted from %s", conn.RemoteAddr())
 		tlscon, ok := conn.(*tls.Conn)
 		if !ok {
-			log.Error("tls handshake error")
+			n.log.Error("tls handshake error")
 		}
-		log.Infof("tls handshake success")
+		n.log.Infof("tls handshake success")
 		state := tlscon.ConnectionState()
 		for _, v := range state.PeerCertificates {
 			b, err := x509.MarshalPKIXPublicKey(v.PublicKey)
 			if err != nil {
-				log.Error(err)
+				n.log.Error(err)
 			}
-			log.Debugf("peer certificates found, pubKey: %s", string(b))
+			n.log.Debugf("peer certificates found, pubKey: %s", string(b))
 		}
 		go func() {
 			for {
@@ -282,28 +281,28 @@ func (n *Node) ReceiveLoop() {
 				err := json.NewDecoder(conn).Decode(&rawMsg)
 				if err != nil {
 					// TODO: for now just reconnect if any error, get parsing errors and connect errors aside
-					log.Infof("error reading stream or decoding")
+					n.log.Infof("error reading stream or decoding")
 					break
 				}
 				var msgType MsgType
 				if err := json.Unmarshal(*rawMsg["type"], &msgType); err != nil {
-					log.Error(err)
+					n.log.Error(err)
 				}
-				log.Debugf("[ %s ] received msg: %s", conn.LocalAddr(), msgType.String())
+				n.log.Debugf("[ %s ] received msg: %s", conn.LocalAddr(), msgType.String())
 				switch msgType {
 				case Collect:
 					var pulsePayload = PulseMessagePayload{}
 					if err := json.Unmarshal(*rawMsg["payload"], &pulsePayload); err != nil {
-						log.Error(err)
+						n.log.Error(err)
 					}
-					log.Debugf("[ %s ] parsed msg: %s:%s", conn.LocalAddr(), msgType.String(), pulsePayload.String())
+					n.log.Debugf("[ %s ] parsed msg: %s:%s", conn.LocalAddr(), msgType.String(), pulsePayload.String())
 					n.Consensus.GetPulsesChan() <- pulsePayload
 				case Vector:
 					var vectorPayload = PulseVectorPayload{}
 					if err := json.Unmarshal(*rawMsg["payload"], &vectorPayload); err != nil {
-						log.Error(err)
+						n.log.Error(err)
 					}
-					log.Debugf("[ %s ] parsed msg: %s:%s", conn.LocalAddr(), msgType.String(), vectorPayload.String())
+					n.log.Debugf("[ %s ] parsed msg: %s:%s", conn.LocalAddr(), msgType.String(), vectorPayload.String())
 					n.Consensus.GetVectorsChan() <- vectorPayload
 				default:
 					panic("unknown message type")

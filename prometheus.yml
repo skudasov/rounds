@@ -1,5 +1,5 @@
 global:
-  scrape_interval:     15s # By default, scrape targets every 15 seconds.
+  scrape_interval: 5s # By default, scrape targets every 15 seconds.
   external_labels:
     monitor: 'codelab-monitor'
 
@@ -7,10 +7,10 @@ scrape_configs:
   - job_name: 'prometheus'
     scrape_interval: 5s
     static_configs:
-      - targets: ['0.0.0.0:8888']
-      - targets: ['0.0.0.0:8889']
-      - targets: ['0.0.0.0:8890']
-      - targets: ['0.0.0.0:8891']
+      - targets: ['0.0.0.0:9500']
+      - targets: ['0.0.0.0:9501']
+      - targets: ['0.0.0.0:9502']
+      - targets: ['0.0.0.0:9503']
       - targets: ['0.0.0.0:10500']
   - job_name: 'node_exporter_metrics'
     scrape_interval: 1s

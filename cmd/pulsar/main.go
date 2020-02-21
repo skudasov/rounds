@@ -12,11 +12,6 @@ func main() {
 	node.WriteKeyPairIfNotExists(cfg)
 	priv, pub, pubPem := node.LoadKeyPair(cfg)
 	n := node.NewNode(cfg, priv, pub, pubPem)
-	node.PromExporter(cfg)
-	node.Tracing(cfg)
-	if err := view.Register(node.LatencyView); err != nil {
-		panic(err)
-	}
 
 	// Connect to peers, reconnect if conn is nil
 	go n.ConnectPeers()
@@ -26,6 +21,12 @@ func main() {
 	go n.Schedule(cfg)
 	// Loop consensus rounds
 	go n.Processing()
+
+	node.PromExporter(cfg)
+	node.Tracing(cfg)
+	if err := view.Register(node.LatencyView); err != nil {
+		panic(err)
+	}
 
 	select {}
 }

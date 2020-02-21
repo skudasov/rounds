@@ -22,9 +22,10 @@ store:
 opencensus:
   prometheus:
     nodelabel: node-2
-    port: 8889
+    port: 9501
   jaeger:
     nodeLabel: node-2
     port: 6832
 logging:
-  level: debug
+  level: info
+  encoding: console

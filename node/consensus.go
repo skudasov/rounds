@@ -106,7 +106,7 @@ func (r *PulseConsensus) GetExchangeDuration() int {
 }
 
 func (r *PulseConsensus) SendPulses(ctx context.Context, n Noder) error {
-	log.Infof("collect round started")
+	r.log.Infof("collect round started")
 	s := n.Sign(DummyHashData)
 	pm := NewPulseMessage(n.GetAddr(), s, n.GetEpoch())
 	// add self entropy too
@@ -120,34 +120,34 @@ func (r *PulseConsensus) SendPulses(ctx context.Context, n Noder) error {
 }
 
 func (r *PulseConsensus) FlushData() {
-	log.Infof("flushing pulses data")
+	r.log.Infof("flushing pulses data")
 	r.PulseProposals = make([]*PulseProposal, 0)
-	log.Infof("flushing vector data")
+	r.log.Infof("flushing vector data")
 	r.PulseVectors = make([]*PulseVector, 0)
 }
 
 func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
-	log.Infof("finalizing collect round #%d", n.GetEpoch())
+	r.log.Infof("finalizing collect round #%d", n.GetEpoch())
 	for {
 		select {
 		case <-ctx.Done():
-			log.Infof("collect round #%d ended", n.GetEpoch())
-			log.Debugf("proposals for round #%d: %s", n.GetEpoch(), r.PulseProposals)
+			r.log.Infof("collect round #%d ended", n.GetEpoch())
+			r.log.Debugf("proposals for round #%d: %s", n.GetEpoch(), r.PulseProposals)
 			return
 		case msg := <-r.PulsesChan:
 			signature := msg.GetSignature()
 			if n.VerifyMessageTrusted(signature) {
-				log.Infof("message verified")
+				r.log.Infof("message verified")
 				r.PulseProposals = append(r.PulseProposals, msg.GetPayload().(*PulseProposal))
 				continue
 			}
-			log.Error("message verification failed, signature is not from known public keys")
+			r.log.Error("message verification failed, signature is not from known public keys")
 		}
 	}
 }
 
 func (r *PulseConsensus) SendVectors(ctx context.Context, n Noder) error {
-	log.Infof("exchange round started")
+	r.log.Infof("exchange round started")
 	s := n.Sign(DummyHashData)
 	// add self vectors too
 	pv := &PulseVector{n.GetAddr(), r.PulseProposals}
@@ -160,37 +160,37 @@ func (r *PulseConsensus) SendVectors(ctx context.Context, n Noder) error {
 }
 
 func (r *PulseConsensus) ReceiveVectors(ctx context.Context, n Noder) {
-	log.Infof("finalizing exchange round #%d", n.GetEpoch())
+	r.log.Infof("finalizing exchange round #%d", n.GetEpoch())
 	for {
 		select {
 		case <-ctx.Done():
-			log.Infof("exchange round #%d ended", n.GetEpoch())
-			log.Debugf("vectors for round #%d: %s", n.GetEpoch(), r.PulseVectors)
+			r.log.Infof("exchange round #%d ended", n.GetEpoch())
+			r.log.Debugf("vectors for round #%d: %s", n.GetEpoch(), r.PulseVectors)
 			return
 		case msg := <-r.VectorChan:
 			signature := msg.GetSignature()
 			if n.VerifyMessageTrusted(signature) {
-				log.Infof("message verified")
+				r.log.Debugf("message verified")
 				r.PulseVectors = append(r.PulseVectors, msg.GetPayload().(*PulseVector))
 				continue
 			}
-			log.Error("message verification failed, signature is not from known public keys")
+			r.log.Error("message verification failed, signature is not from known public keys")
 		}
 	}
 }
 
 func (r *PulseConsensus) Commit(ctx context.Context, n Noder) {
-	log.Infof("committing consensus data round #%d", n.GetEpoch())
+	r.log.Infof("committing consensus data round #%d", n.GetEpoch())
 	for {
 		select {
 		case <-ctx.Done():
-			log.Infof("commit round ended")
+			r.log.Infof("commit round ended")
 			return
 		default:
 			winner := r.DecideWinner()
-			log.Infof("winner: %s, me: %s", winner, r.SelfProposal.Entropy)
+			r.log.Infof("winner: %s, me: %s", winner, r.SelfProposal.Entropy)
 			if winner == r.SelfProposal.Entropy {
-				log.Infof("committing winner pulse")
+				r.log.Infof("committing winner pulse")
 				var buf bytes.Buffer
 				enc := gob.NewEncoder(&buf)
 				if err := enc.Encode(winner); err != nil {
@@ -201,9 +201,9 @@ func (r *PulseConsensus) Commit(ctx context.Context, n Noder) {
 					time.Now().Unix(),
 					buf.Bytes(),
 				}
-				log.Debugf("committing block: %v", b)
+				r.log.Debugf("committing block: %v", b)
 				if err := n.Commit(context.Background(), b); err != nil {
-					log.Error(ErrStorageConnection(err))
+					r.log.Error(ErrStorageConnection(err))
 				}
 				return
 			}
@@ -225,11 +225,11 @@ func (r *PulseConsensus) DecideWinner() string {
 			versions[proposal.Entropy] += 1
 		}
 	}
-	log.Infof("versions: %v", versions)
+	r.log.Infof("versions: %v", versions)
 	r.MajorityData = r.AgreeSet(versions)
-	log.Infof("majority data: %v", r.MajorityData)
+	r.log.Infof("majority data: %v", r.MajorityData)
 	if len(r.MajorityData) == 0 {
-		log.Infof("failed to establish consensus")
+		r.log.Infof("failed to establish consensus")
 		return NoConsensusStatus
 	} else {
 		return r.Winner(r.MajorityData)

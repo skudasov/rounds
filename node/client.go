@@ -58,14 +58,16 @@ func (m *Client) Broadcast(ctx context.Context, msg interface{}) error {
 		if c == nil {
 			continue
 		}
-		log.Infof("sending msg to %s: %s", c.RemoteAddr(), msg)
-		err := json.NewEncoder(c).Encode(msg)
-		if err != nil {
-			if err := c.Close(); err != nil {
-				log.Errorf("failed to close peer connection: %s", c.LocalAddr())
+		go func(c net.Conn) {
+			m.log.Infof("sending msg to %s: %s", c.RemoteAddr(), msg)
+			err := json.NewEncoder(c).Encode(msg)
+			if err != nil {
+				if err := c.Close(); err != nil {
+					m.log.Errorf("failed to close peer connection: %s", c.LocalAddr())
+				}
+				m.Conns[ci] = nil
 			}
-			m.Conns[ci] = nil
-		}
+		}(c)
 	}
 	stats.Record(tagCtx, BroadcastMs.M(SinceInMilliseconds(startTime)))
 	return nil

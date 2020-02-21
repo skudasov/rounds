@@ -2,8 +2,11 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type correlationIdType int
@@ -43,15 +46,38 @@ func (m *Logger) FromCtx(ctx context.Context) *Logger {
 	return newLogger
 }
 
-func NewLogger() *Logger {
-	var l *zap.Logger
-	switch viper.GetString("logging.level") {
-	case "debug":
-		l, _ = zap.NewDevelopment()
-	case "production":
-		l, _ = zap.NewProduction()
-	default:
-		l, _ = zap.NewDevelopment()
+func setupLogger(encoding string, level string) *Logger {
+	rawJSON := []byte(fmt.Sprintf(`{
+	  "level": "%s",
+	  "encoding": "%s",
+	  "outputPaths": ["stdout", "/tmp/logs"],
+	  "errorOutputPaths": ["stderr"],
+	  "encoderConfig": {
+	    "messageKey": "message",
+	    "levelKey": "level",
+		"levelEncoder": "uppercase",
+        "timeKey": "time",
+		"timeEncoder": "ISO8601",
+		"callerKey": "caller",
+		"callerEncoder": "short"
+	  }
+	}`, level, encoding))
+
+	var cfg zap.Config
+	if err := json.Unmarshal(rawJSON, &cfg); err != nil {
+		panic(err)
 	}
-	return &Logger{l.Sugar()}
+	cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	logger, err := cfg.Build()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+	return &Logger{logger.Sugar()}
+}
+
+func NewLogger() *Logger {
+	lvl := viper.GetString("logging.level")
+	encoding := viper.GetString("logging.encoding")
+	return setupLogger(encoding, lvl)
 }

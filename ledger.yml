@@ -11,3 +11,4 @@ opencensus:
     port: 11500
 logging:
   level: debug
+  encoding: console
