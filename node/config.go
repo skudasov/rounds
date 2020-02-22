@@ -6,9 +6,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 	"log"
+	"rounds/telemetry"
 )
-
-var validate *validator.Validate
 
 type Config struct {
 	Node struct {
@@ -28,17 +27,8 @@ type Config struct {
 		}
 		Reconnect int `json:"reconnect",validate:"required"`
 	}
-	Opencensus struct {
-		Prometheus struct {
-			Nodelabel string
-			Port      string
-		} `validate:"required"`
-		Jaeger struct {
-			Nodelabel string
-			Port      string
-		} `validate:"required"`
-	}
-	Store struct {
+	Opencensus telemetry.OpencensusConfig
+	Store      struct {
 		Host string `validate:"required"`
 	} `validate:"required"`
 	Logging struct {

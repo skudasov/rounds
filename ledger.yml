@@ -9,6 +9,8 @@ opencensus:
   jaeger:
     nodeLabel: ledger-a
     port: 11500
+  zpages:
+    port: 12004
 logging:
-  level: debug
+  level: info
   encoding: console

@@ -20,11 +20,11 @@ type server struct {
 	log *logger.Logger
 }
 
-func (s *server) Commit(ctx context.Context, in *pb.CommitRequest) (*pb.CommitResponse, error) {
-	s.log.Infof("Received block data: %s", in.GetEntropy())
+func (s *server) Commit(ctx context.Context, in *pb.CommitPulseRequest) (*pb.CommitPulseResponse, error) {
+	s.log.Infof("received pulse data: %s", in.GetEntropy())
 	latestEpoch, err := s.store.GetLatestBlockEpoch()
 	if err != nil {
-		return &pb.CommitResponse{Error: "failed to get latest block epoch"}, nil
+		return &pb.CommitPulseResponse{Error: "failed to get latest pulse number"}, nil
 	}
 	b := &node.Block{
 		Epoch:         uint64(latestEpoch + 1),
@@ -32,18 +32,18 @@ func (s *server) Commit(ctx context.Context, in *pb.CommitRequest) (*pb.CommitRe
 		WinnerEntropy: in.GetEntropy(),
 	}
 	if err := s.store.CommitBlock(b); err != nil {
-		return &pb.CommitResponse{Error: "error"}, nil
+		return &pb.CommitPulseResponse{Error: "error"}, nil
 	}
-	return &pb.CommitResponse{Error: "no error"}, nil
+	return &pb.CommitPulseResponse{Error: "no error"}, nil
 }
 
-func (s *server) GetLatestBlockEpoch(ctx context.Context, in *pb.LatestBlockEpochRequest) (*pb.LatestBlockEpochResponse, error) {
-	s.log.Infof("Received latest PN request")
+func (s *server) GetLatestBlockEpoch(ctx context.Context, in *pb.LatestPNRequest) (*pb.LatestPNResponse, error) {
 	epoch, err := s.store.GetLatestBlockEpoch()
 	if err != nil {
-		return &pb.LatestBlockEpochResponse{Error: err.Error()}, nil
+		return &pb.LatestPNResponse{Error: err.Error()}, nil
 	}
-	return &pb.LatestBlockEpochResponse{Epoch: epoch}, nil
+	s.log.Infof("Received latest PN request: %d", epoch)
+	return &pb.LatestPNResponse{Epoch: epoch}, nil
 }
 
 func Serve(c *Config) {

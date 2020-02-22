@@ -6,7 +6,6 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/asn1"
 	"encoding/json"
 	"math/big"
@@ -37,6 +36,8 @@ type Noder interface {
 	GetLatestBlockNumber() uint64
 	// GetEpoch
 	GetEpoch() uint64
+	//SetEpoch
+	SetEpoch(epoch uint64)
 }
 
 type Node struct {
@@ -87,6 +88,10 @@ func NewNode(c *Config, priv *ecdsa.PrivateKey, pub *ecdsa.PublicKey, pubPem str
 	return n
 }
 
+func (n *Node) SetEpoch(epoch uint64) {
+	n.Epoch = epoch
+}
+
 func (n *Node) GetEpoch() uint64 {
 	return n.Epoch
 }
@@ -115,8 +120,7 @@ func (n *Node) LoadPeerPublicKeys() {
 	keys := make([]*ecdsa.PublicKey, 0)
 	for _, pubKeyPem := range n.peers {
 		n.log.Infof("pub key loaded from: %s", pubKeyPem.PubKeyDir)
-		pubKey := LoadPublicKey(pubKeyPem.PubKeyDir)
-		keys = append(keys, pubKey)
+		keys = append(keys, LoadPublicKey(pubKeyPem.PubKeyDir))
 	}
 	n.peersPublicKeys = keys
 }
@@ -130,14 +134,13 @@ func (n *Node) GetAddr() string {
 }
 
 // VerifyMessageTrusted gets signature from message and check if it's any known peer message
-// by default ecdsa marshal signature in asn1 format
 func (n *Node) VerifyMessageTrusted(signature []byte) bool {
-	n.log.Info("verifying message")
 	for _, pubKey := range n.peersPublicKeys {
 		hasher := md5.New()
 		if _, err := hasher.Write(DummyHashData); err != nil {
 			n.log.Error(err)
 		}
+		// by default ecdsa marshal signature in asn1 format
 		var esig struct {
 			R, S *big.Int
 		}
@@ -216,37 +219,35 @@ func (n *Node) Schedule(cfg *Config) {
 func (n *Node) Processing() {
 	for {
 		cons := n.Consensus
-		select {
-		case <-cons.GetStartChan():
-			n.Consensus.FlushData()
+		<-cons.GetStartChan()
+		cons.FlushData()
 
-			// Send pulses to all
-			ctx, _ := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
-			if err := cons.SendPulses(ctx, n); err != nil {
-				n.log.Error(err)
-			}
-			cons.ReceivePulses(ctx, n)
-			<-ctx.Done()
+		// Send pulses to all
+		ctx, cancel1 := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
+		cons.SendPulses(ctx, n)
+		cons.ReceivePulses(ctx, n)
 
-			// After timeout send vectors to all
-			ctx2, _ := context.WithTimeout(context.Background(), time.Duration(cons.GetExchangeDuration())*time.Millisecond)
-			if err := cons.SendVectors(ctx2, n); err != nil {
-				n.log.Error(err)
-			}
-			cons.ReceiveVectors(ctx2, n)
-			<-ctx2.Done()
+		// After timeout send vectors to all
+		ctx2, cancel2 := context.WithTimeout(context.Background(), time.Duration(cons.GetExchangeDuration())*time.Millisecond)
+		cons.SendVectors(ctx2, n)
+		cons.ReceiveVectors(ctx2, n)
 
-			// Calculate data set and blame malicious nodes
-			ctx3, _ := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
-			cons.Commit(ctx3, n)
-			<-ctx3.Done()
-		}
+		// Calculate data set and blame malicious nodes
+		ctx3, cancel3 := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
+		cons.Commit(ctx3, n)
+
+		bn := n.GetLatestBlockNumber()
+		n.SetEpoch(bn)
+		n.log.Infof("next pulse number: %d", bn+1)
+		cancel1()
+		cancel2()
+		cancel3()
 	}
 }
 
 // ReceiveLoop receives all messages, send them to round input channel switched by type
 func (n *Node) ReceiveLoop() {
-	ln, err := tls.Listen("tcp", n.Addr, n.srvTlsCtx)
+	ln, err := tls.Listen(DefaultNetworkProto, n.Addr, n.srvTlsCtx)
 	if err != nil {
 		n.log.Fatal(err)
 	}
@@ -262,19 +263,20 @@ func (n *Node) ReceiveLoop() {
 		}
 		defer conn.Close()
 		n.log.Infof("server: accepted from %s", conn.RemoteAddr())
-		tlscon, ok := conn.(*tls.Conn)
-		if !ok {
-			n.log.Error("tls handshake error")
-		}
-		n.log.Infof("tls handshake success")
-		state := tlscon.ConnectionState()
-		for _, v := range state.PeerCertificates {
-			b, err := x509.MarshalPKIXPublicKey(v.PublicKey)
-			if err != nil {
-				n.log.Error(err)
-			}
-			n.log.Debugf("peer certificates found, pubKey: %s", string(b))
-		}
+		// TODO: verify peer certificates or check signature?
+		//tlscon, ok := conn.(*tls.Conn)
+		//if !ok {
+		//	n.log.Error("tls handshake error")
+		//}
+		//n.log.Infof("tls handshake success")
+		//state := tlscon.ConnectionState()
+		//for _, v := range state.PeerCertificates {
+		//	b, err := x509.MarshalPKIXPublicKey(v.PublicKey)
+		//	if err != nil {
+		//		n.log.Error(err)
+		//	}
+		//	n.log.Debugf("peer certificates found, pubKey: %s", string(b))
+		//}
 		go func() {
 			for {
 				var rawMsg map[string]*json.RawMessage

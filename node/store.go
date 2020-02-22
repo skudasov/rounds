@@ -47,19 +47,19 @@ type TestBadgerStorage struct {
 }
 
 func (m *TestBadgerStorage) GetLatestBlockEpoch() uint64 {
-	resp, err := m.client.GetLatestBlockEpoch(context.Background(), &testBadgerPb.LatestBlockEpochRequest{})
+	resp, err := m.client.GetLatestBlockEpoch(context.Background(), &testBadgerPb.LatestPNRequest{})
 	if err != nil {
 		m.log.Error(err)
 	}
 	if resp.Error != "" {
 		m.log.Error(resp.Error)
 	}
-	m.log.Infof("latest block number received: %d", resp.Epoch)
+	m.log.Infof("latest pulse number received: %d", resp.Epoch)
 	return resp.Epoch
 }
 
 func (m *TestBadgerStorage) Commit(ctx context.Context, b BlockData) error {
-	resp, err := m.client.Commit(ctx, &testBadgerPb.CommitRequest{Entropy: b.WinnerEntropy})
+	resp, err := m.client.Commit(ctx, &testBadgerPb.CommitPulseRequest{Entropy: b.WinnerEntropy})
 	if err != nil {
 		return err
 	}

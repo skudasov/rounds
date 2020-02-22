@@ -3,6 +3,7 @@ package main
 import (
 	"go.opencensus.io/stats/view"
 	"rounds/node"
+	"rounds/telemetry"
 )
 
 func main() {
@@ -22,11 +23,12 @@ func main() {
 	// Loop consensus rounds
 	go n.Processing()
 
-	node.PromExporter(cfg)
-	node.Tracing(cfg)
+	telemetry.PromExporter(cfg.Opencensus)
+	telemetry.Tracing(cfg.Opencensus)
 	if err := view.Register(node.LatencyView); err != nil {
 		panic(err)
 	}
+	telemetry.ServeZPages(cfg.Opencensus)
 
 	select {}
 }

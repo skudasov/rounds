@@ -19,8 +19,6 @@ type Messager interface {
 	GetSignature() []byte
 	// GetPayload gets message payload
 	GetPayload() interface{}
-	// GetEpoch gets epoch number
-	GetEpoch() uint64
 }
 
 type PulseMessagePayload struct {

@@ -20,9 +20,9 @@ type Consensus interface {
 	// Flushes pulses and vectors data
 	FlushData()
 	// SendPulses sends pulse data proposals
-	SendPulses(ctx context.Context, n Noder) error
+	SendPulses(ctx context.Context, n Noder)
 	// SendVectors sends acquired pulse vector
-	SendVectors(ctx context.Context, n Noder) error
+	SendVectors(ctx context.Context, n Noder)
 	// ReceivePulses collects data
 	ReceivePulses(ctx context.Context, n Noder)
 	// ReceiveVectors receives all vectors from peers
@@ -105,7 +105,7 @@ func (r *PulseConsensus) GetExchangeDuration() int {
 	return r.ExchangeDuration
 }
 
-func (r *PulseConsensus) SendPulses(ctx context.Context, n Noder) error {
+func (r *PulseConsensus) SendPulses(ctx context.Context, n Noder) {
 	r.log.Infof("collect round started")
 	s := n.Sign(DummyHashData)
 	pm := NewPulseMessage(n.GetAddr(), s, n.GetEpoch())
@@ -114,20 +114,18 @@ func (r *PulseConsensus) SendPulses(ctx context.Context, n Noder) error {
 	r.PulseProposals = append(r.PulseProposals, selfProposal)
 	r.SelfProposal = selfProposal
 	if err := n.GetClient().Broadcast(ctx, pm); err != nil {
-		return err
+		r.log.Error(err)
 	}
-	return nil
 }
 
 func (r *PulseConsensus) FlushData() {
-	r.log.Infof("flushing pulses data")
+	r.log.Debugf("flushing pulses data")
 	r.PulseProposals = make([]*PulseProposal, 0)
-	r.log.Infof("flushing vector data")
+	r.log.Debugf("flushing vector data")
 	r.PulseVectors = make([]*PulseVector, 0)
 }
 
 func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
-	r.log.Infof("finalizing collect round #%d", n.GetEpoch())
 	for {
 		select {
 		case <-ctx.Done():
@@ -137,7 +135,7 @@ func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
 		case msg := <-r.PulsesChan:
 			signature := msg.GetSignature()
 			if n.VerifyMessageTrusted(signature) {
-				r.log.Infof("message verified")
+				r.log.Debugf("message verified: %s", msg)
 				r.PulseProposals = append(r.PulseProposals, msg.GetPayload().(*PulseProposal))
 				continue
 			}
@@ -146,7 +144,7 @@ func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
 	}
 }
 
-func (r *PulseConsensus) SendVectors(ctx context.Context, n Noder) error {
+func (r *PulseConsensus) SendVectors(ctx context.Context, n Noder) {
 	r.log.Infof("exchange round started")
 	s := n.Sign(DummyHashData)
 	// add self vectors too
@@ -154,9 +152,8 @@ func (r *PulseConsensus) SendVectors(ctx context.Context, n Noder) error {
 	r.PulseVectors = append(r.PulseVectors, &PulseVector{n.GetAddr(), r.PulseProposals})
 	log.Debugf("pulse proposals: %s", r.PulseProposals)
 	if err := n.GetClient().Broadcast(ctx, NewPulseVectorMessage(n.GetAddr(), s, n.GetEpoch(), pv)); err != nil {
-		return err
+		r.log.Error(err)
 	}
-	return nil
 }
 
 func (r *PulseConsensus) ReceiveVectors(ctx context.Context, n Noder) {
@@ -170,7 +167,7 @@ func (r *PulseConsensus) ReceiveVectors(ctx context.Context, n Noder) {
 		case msg := <-r.VectorChan:
 			signature := msg.GetSignature()
 			if n.VerifyMessageTrusted(signature) {
-				r.log.Debugf("message verified")
+				r.log.Debugf("message verified: %s", msg)
 				r.PulseVectors = append(r.PulseVectors, msg.GetPayload().(*PulseVector))
 				continue
 			}

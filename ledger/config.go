@@ -3,33 +3,22 @@ package ledger
 import (
 	"flag"
 	"fmt"
-	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
+	"rounds/telemetry"
 )
-
-// use a single instance of Validate, it caches struct info
-var validate *validator.Validate
 
 type Config struct {
 	Ledger struct {
-		Host string
-	}
+		Host string `validate:"required"`
+	} `validate:"required"`
 	DB struct {
-		Path string
-	}
-	Opencensus struct {
-		Prometheus struct {
-			Nodelabel string
-			Port      string
-		}
-		Jaeger struct {
-			Nodelabel string
-			Port      string
-		}
-	}
-	Logging struct {
-		Level string
-	}
+		Path string `validate:"required"`
+	} `validate:"required"`
+	Opencensus telemetry.OpencensusConfig
+	Logging    struct {
+		Level    string `validate:"required"`
+		Encoding string `validate:"required"`
+	} `validate:"required"`
 }
 
 func LoadConfig() *Config {

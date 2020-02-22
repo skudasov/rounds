@@ -7,21 +7,21 @@ option java_outer_classname = "LedgerProto";
 package ledger;
 
 service Ledger {
-    rpc Commit (CommitRequest) returns (CommitResponse) {}
-    rpc GetLatestBlockEpoch(LatestBlockEpochRequest) returns (LatestBlockEpochResponse) {}
+    rpc Commit (CommitPulseRequest) returns (CommitPulseResponse) {}
+    rpc GetLatestBlockEpoch (LatestPNRequest) returns (LatestPNResponse) {}
 }
 
-message LatestBlockEpochRequest {}
+message LatestPNRequest {}
 
-message LatestBlockEpochResponse {
+message LatestPNResponse {
     uint64 epoch = 1;
     string error = 2;
 }
 
-message CommitRequest {
+message CommitPulseRequest {
     bytes entropy = 2;
 }
 
-message CommitResponse {
+message CommitPulseResponse {
     string error = 1;
 }

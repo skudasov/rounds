@@ -7,6 +7,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/zpages"
 	"log"
 	"net/http"
 	"time"
@@ -35,6 +36,17 @@ var (
 
 func SinceInMilliseconds(startTime time.Time) float64 {
 	return float64(time.Since(startTime).Nanoseconds()) / 1e6
+}
+
+func ServeZPages(c *Config) {
+	mux := http.NewServeMux()
+	zpages.Handle(mux, "/debug")
+
+	port := ":" + c.Opencensus.ZPages.Port
+	log.Printf("serving zPages on port: %s", port)
+	if err := http.ListenAndServe(port, mux); err != nil {
+		log.Fatalf("Failed to serve zPages")
+	}
 }
 
 func Tracing(c *Config) {

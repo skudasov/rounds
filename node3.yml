@@ -26,6 +26,8 @@ opencensus:
   jaeger:
     nodeLabel: node-3
     port: 6833
+  zpages:
+    port: 12002
 logging:
   level: info
   encoding: console

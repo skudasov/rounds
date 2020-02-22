@@ -58,8 +58,8 @@ func (m *Client) Broadcast(ctx context.Context, msg interface{}) error {
 		if c == nil {
 			continue
 		}
-		go func(c net.Conn) {
-			m.log.Infof("sending msg to %s: %s", c.RemoteAddr(), msg)
+		go func(ci string, c net.Conn) {
+			m.log.Debugf("sending msg to %s: %s", c.RemoteAddr(), msg)
 			err := json.NewEncoder(c).Encode(msg)
 			if err != nil {
 				if err := c.Close(); err != nil {
@@ -67,7 +67,7 @@ func (m *Client) Broadcast(ctx context.Context, msg interface{}) error {
 				}
 				m.Conns[ci] = nil
 			}
-		}(c)
+		}(ci, c)
 	}
 	stats.Record(tagCtx, BroadcastMs.M(SinceInMilliseconds(startTime)))
 	return nil

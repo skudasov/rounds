@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/spf13/viper"
 	"rounds/ledger"
+	"rounds/telemetry"
 )
 
 func main() {
@@ -13,8 +14,9 @@ func main() {
 	}
 
 	go ledger.Serve(cfg)
-	ledger.PromExporter(cfg)
-	ledger.Tracing(cfg)
+	telemetry.PromExporter(cfg.Opencensus)
+	telemetry.Tracing(cfg.Opencensus)
+	telemetry.ServeZPages(cfg.Opencensus)
 
 	select {}
 }
