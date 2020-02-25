@@ -14,10 +14,8 @@ func main() {
 	priv, pub, pubPem := node.LoadKeyPair(cfg)
 	n := node.NewNode(cfg, priv, pub, pubPem)
 
-	// Connect to peers, reconnect if conn is nil
-	go n.ConnectPeers()
 	// Receive all messages, switch by type
-	go n.ReceiveLoop()
+	go n.StartTransport()
 	// Sync rounds between nodes and schedule consensus start
 	go n.Schedule(cfg)
 	// Loop consensus rounds

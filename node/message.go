@@ -23,6 +23,7 @@ type Messager interface {
 
 type PulseMessagePayload struct {
 	Signature     []byte
+	Rst           int64          `json:"rst"`
 	Epoch         uint64         `json:"epoch"`
 	From          string         `json:"from"`
 	PulseProposal *PulseProposal `json:"proposal"`
@@ -37,7 +38,7 @@ type PulseMessage struct {
 	Payload PulseMessagePayload `json:"payload"`
 }
 
-func NewPulseMessage(from string, signature []byte, epoch uint64) *PulseMessage {
+func NewPulseMessage(from string, signature []byte, epoch uint64, rst int64) *PulseMessage {
 	t := randomBytesString(16)
 	t = base58.Encode([]byte(t))
 	return &PulseMessage{
@@ -47,6 +48,7 @@ func NewPulseMessage(from string, signature []byte, epoch uint64) *PulseMessage 
 		Payload: PulseMessagePayload{
 			Signature:     signature,
 			Epoch:         epoch,
+			Rst:           rst,
 			From:          from,
 			PulseProposal: NewPulseProposal(from, t),
 		},
@@ -67,8 +69,8 @@ func (m PulseMessagePayload) GetSignature() []byte {
 
 func (m PulseMessagePayload) String() string {
 	return fmt.Sprintf(
-		"[ epoch: %d, from: %s, proposal: %s ]",
-		m.Epoch,
+		"[ rst: %d, from: %s, proposal: %s ]",
+		m.Rst,
 		m.From,
 		m.PulseProposal.String(),
 	)
@@ -76,6 +78,7 @@ func (m PulseMessagePayload) String() string {
 
 type PulseVectorPayload struct {
 	Signature       []byte
+	Rst             int64        `json:"rst"`
 	Epoch           uint64       `json:"epoch"`
 	From            string       `json:"from"`
 	EntropiesVector *PulseVector `json:"entropies_vector"`
@@ -86,13 +89,14 @@ type PulseVectorMessage struct {
 	Payload PulseVectorPayload `json:"payload"`
 }
 
-func NewPulseVectorMessage(from string, signature []byte, epoch uint64, ens *PulseVector) *PulseVectorMessage {
+func NewPulseVectorMessage(from string, signature []byte, epoch uint64, rst int64, ens *PulseVector) *PulseVectorMessage {
 	return &PulseVectorMessage{
 		Header: Header{
 			Type: Vector,
 		},
 		Payload: PulseVectorPayload{
 			Signature:       signature,
+			Rst:             rst,
 			Epoch:           epoch,
 			From:            from,
 			EntropiesVector: ens,
@@ -114,8 +118,8 @@ func (m PulseVectorPayload) GetSignature() []byte {
 
 func (m PulseVectorPayload) String() string {
 	return fmt.Sprintf(
-		"[ epoch: %d, from: %s, vector: %s ]",
-		m.Epoch,
+		"[ rst: %d, from: %s, vector: %s ]",
+		m.Rst,
 		m.From,
 		m.EntropiesVector,
 	)

@@ -12,7 +12,7 @@ import (
 type Storage interface {
 	// Commit commits block to storage
 	Commit(context.Context, BlockData) error
-	// GetLatestBlock gets latest block from storage
+	// GetLatestPulse gets latest block from storage
 	GetLatestBlock() (*BlockData, error)
 	// GetLatestBlockEpoch get latest block epoch for nodes sync
 	GetLatestBlockEpoch() uint64

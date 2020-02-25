@@ -17,6 +17,7 @@ node:
       max_messages: 200
       duration: 500
   reconnect: 5
+  transport: tcp
 store:
   host: 0.0.0.0:5050
 opencensus:
@@ -29,5 +30,5 @@ opencensus:
   zpages:
     port: 12002
 logging:
-  level: info
+  level: debug
   encoding: console

@@ -1,11 +1,14 @@
 package node
 
 import (
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func basicCons() *PulseConsensus {
+	viper.SetDefault("logging.level", "debug")
+	viper.SetDefault("logging.encoding", "console")
 	return NewPulseConsensus(
 		500,
 		500,

@@ -18,31 +18,59 @@ import (
 type Clienter interface {
 	// Broadcast sends a message to all peers
 	Broadcast(context.Context, interface{}) error
-	// GetConns get peers connection
-	GetConns() map[string]net.Conn
 }
 
-type Client struct {
-	cfg   *Config
-	Conns map[string]net.Conn
+type TCPClient struct {
+	cfg          *Config
+	Addr         string
+	clientTlsCtx *tls.Config
+	Peers        []Peer
+	Conns        map[string]net.Conn
 
 	log *logger.Logger
 }
 
-func NewClient(c *Config) *Client {
-	return &Client{c, make(map[string]net.Conn), logger.NewLogger()}
+func NewTCPClient(c *Config, clientTlsCtx *tls.Config) *TCPClient {
+	client := &TCPClient{c, c.Node.Addr, clientTlsCtx, c.Node.Peers, make(map[string]net.Conn), logger.NewLogger()}
+	go client.ConnectPeers(c.Node.Reconnect)
+	return client
 }
 
-func (m *Client) GetConns() map[string]net.Conn {
-	return m.Conns
+// ConnectPeer connects to peer, if peer is offline nil the connection so it can be reconnected later
+func (m *TCPClient) ConnectPeer(addr string) {
+	m.log.Infof("connecting to peer: %s", addr)
+	conn, err := tls.Dial(DefaultNetworkProto, addr, m.clientTlsCtx)
+	if err != nil {
+		m.log.Errorf("failed to connect peer: %s", addr)
+		m.Conns[addr] = nil
+		return
+	}
+	m.Conns[addr] = conn
+	m.log.Infof("[ %s ] connected to %s", m.Addr, addr)
 }
 
-// Broadcast sends message to all peers
-func (m *Client) Broadcast(ctx context.Context, msg interface{}) error {
+// ConnectPeers connect to peers from config, reconnect if connection is nil
+func (m *TCPClient) ConnectPeers(reconnect int) {
+	for _, p := range m.Peers {
+		m.ConnectPeer(p.Addr)
+	}
+	for {
+		time.Sleep(time.Duration(reconnect) * time.Second)
+		for addr, c := range m.Conns {
+			if c == nil {
+				m.log.Infof("reconnecting to peer: %s", addr)
+				m.ConnectPeer(addr)
+			}
+		}
+	}
+}
+
+// Broadcast send messages to all peers
+func (m *TCPClient) Broadcast(ctx context.Context, msg interface{}) error {
 	tagCtx, err := tag.New(
 		context.Background(),
 		tag.Insert(KeyLabel, m.cfg.Opencensus.Prometheus.Nodelabel),
-		tag.Insert(KeyMethod, "broadcast"),
+		tag.Insert(KeyMethod, "broadcast_TCP"),
 	)
 	if err != nil {
 		return err
@@ -73,17 +101,65 @@ func (m *Client) Broadcast(ctx context.Context, msg interface{}) error {
 	return nil
 }
 
+type UDPClient struct {
+	cfg   *Config
+	Addr  string
+	Peers []Peer
+
+	log *logger.Logger
+}
+
+func NewUDPClient(c *Config) *UDPClient {
+	return &UDPClient{c, c.Node.Addr, c.Node.Peers, logger.NewLogger()}
+}
+
+// Broadcast send messages to all peers
+func (m *UDPClient) Broadcast(ctx context.Context, msg interface{}) error {
+	tagCtx, err := tag.New(
+		context.Background(),
+		tag.Insert(KeyLabel, m.cfg.Opencensus.Prometheus.Nodelabel),
+		tag.Insert(KeyMethod, "broadcast_UDP"),
+	)
+	if err != nil {
+		return err
+	}
+	startTime := time.Now()
+	_, span := trace.StartSpan(context.Background(), "Broadcast")
+	span.AddAttributes(
+		trace.StringAttribute("method", "BC"),
+	)
+	defer span.End()
+
+	for _, p := range m.Peers {
+		go func(p Peer) {
+			m.log.Debugf("sending msg to %s: %s", p.Addr, msg)
+			RemoteAddr, err := net.ResolveUDPAddr("udp", p.Addr)
+			if err != nil {
+				m.log.Errorf("failed to resolve udp addr: %s", p.Addr)
+			}
+			c, err := net.DialUDP("udp", nil, RemoteAddr)
+			defer c.Close()
+			err = json.NewEncoder(c).Encode(msg)
+			if err != nil {
+				m.log.Errorf("failed to send msg to: %s", p.Addr)
+			}
+		}(p)
+	}
+	stats.Record(tagCtx, BroadcastMs.M(SinceInMilliseconds(startTime)))
+	return nil
+}
+
 func tlsContexts() (*tls.Config, *tls.Config) {
-	certSender, err := tls.LoadX509KeyPair("certs/client.pem", "certs/client.key")
+	certClient, err := tls.LoadX509KeyPair("certs/client.pem", "certs/client.key")
 	if err != nil {
 		log.Fatalf("client: load keys: %s", err)
 	}
-	configSender := tls.Config{Certificates: []tls.Certificate{certSender}, InsecureSkipVerify: true}
+	configClient := tls.Config{Certificates: []tls.Certificate{certClient}, InsecureSkipVerify: true}
 
-	certListener, err := tls.LoadX509KeyPair("certs/server.pem", "certs/server.key")
+	certServer, err := tls.LoadX509KeyPair("certs/server.pem", "certs/server.key")
 	if err != nil {
 		log.Fatalf("server: load keys: %s", err)
 	}
-	configListener := tls.Config{Certificates: []tls.Certificate{certListener}}
-	return &configSender, &configListener
+	configServer := tls.Config{Certificates: []tls.Certificate{certServer}}
+	return &configClient, &configServer
 }
