@@ -5,10 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/md5"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/asn1"
 	"encoding/json"
 	"math/big"
+	"net"
 	"rounds/logger"
 	"time"
 )
@@ -30,27 +30,27 @@ type Noder interface {
 	Sign(data []byte) []byte
 	// Commit stores block
 	Commit(context.Context, BlockData) error
-	// GetLatestBlock gets latest block, by epoch
-	GetLatestBlock() (*BlockData, error)
-	// GetLatestBlockNumber
-	GetLatestBlockNumber() uint64
-	// GetEpoch
-	GetEpoch() uint64
-	//SetEpoch
-	SetEpoch(epoch uint64)
+	// GetLatestPulse gets latest block, by epoch
+	GetLatestPulse() (*BlockData, error)
+	// GetLatestPulseNumber
+	GetLatestPulseNumber() uint64
+	// GetPulseNumber
+	GetPulseNumber() uint64
+	//SetPulseNumber
+	SetPulseNumber(epoch uint64)
+	//RouteMsg
+	RouteMsg(addr net.Addr, rawMsg map[string]*json.RawMessage)
 }
 
 type Node struct {
 	privateKey      *ecdsa.PrivateKey
 	publicKey       *ecdsa.PublicKey
 	publicKeyPem    string
-	srvTlsCtx       *tls.Config
-	clientTlsCtx    *tls.Config
+	transport       Transport
 	Addr            string
 	Reconnect       int
-	client          *Client
+	client          Clienter
 	Consensus       Consensus
-	peers           []Peer
 	peersPublicKeys []*ecdsa.PublicKey
 
 	Epoch uint64
@@ -59,48 +59,60 @@ type Node struct {
 	log *logger.Logger
 }
 
+func (n *Node) PublicKeyPem() string {
+	return n.publicKeyPem
+}
+
 func NewNode(c *Config, priv *ecdsa.PrivateKey, pub *ecdsa.PublicKey, pubPem string) *Node {
-	tlsSrv, tlsClient := tlsContexts()
+	tlsClient, tlsSrv := tlsContexts()
 	s := NewBadgerStorage(c.Store.Host)
+	var transport Transport
+	var client Clienter
+	switch c.Node.Transport {
+	case "tcp":
+		transport = NewTCPTransport(tlsSrv)
+		client = NewTCPClient(c, tlsClient)
+	case "udp":
+		transport = NewUDPTransport()
+		client = NewUDPClient(c)
+	}
 	n := &Node{
 		priv,
 		pub,
 		pubPem,
-		tlsClient,
-		tlsSrv,
+		transport,
 		c.Node.Addr,
 		c.Node.Reconnect,
-		NewClient(c),
+		client,
 		NewPulseConsensus(
 			c.Node.Rounds.Collect.Duration,
 			c.Node.Rounds.Exchange.Duration,
 			c.Node.Rounds.Collect.MaxMessages,
 			c.Node.Rounds.Exchange.MaxMessages,
 		),
-		c.Node.Peers,
 		nil,
 		0,
 		s,
 		logger.NewLogger(),
 	}
-	n.LoadPeerPublicKeys()
-	n.Epoch = n.GetLatestBlockNumber()
+	n.LoadPeerPublicKeys(c.Node.Peers)
+	n.Epoch = n.GetLatestPulseNumber()
 	return n
 }
 
-func (n *Node) SetEpoch(epoch uint64) {
+func (n *Node) SetPulseNumber(epoch uint64) {
 	n.Epoch = epoch
 }
 
-func (n *Node) GetEpoch() uint64 {
+func (n *Node) GetPulseNumber() uint64 {
 	return n.Epoch
 }
 
-func (n *Node) GetLatestBlockNumber() uint64 {
+func (n *Node) GetLatestPulseNumber() uint64 {
 	return n.store.GetLatestBlockEpoch()
 }
 
-func (n *Node) GetLatestBlock() (*BlockData, error) {
+func (n *Node) GetLatestPulse() (*BlockData, error) {
 	// no iterator api in cete for now
 	b, err := n.store.GetLatestBlock()
 	if err != nil {
@@ -116,9 +128,9 @@ func (n *Node) Commit(ctx context.Context, b BlockData) error {
 	return nil
 }
 
-func (n *Node) LoadPeerPublicKeys() {
+func (n *Node) LoadPeerPublicKeys(peers []Peer) {
 	keys := make([]*ecdsa.PublicKey, 0)
-	for _, pubKeyPem := range n.peers {
+	for _, pubKeyPem := range peers {
 		n.log.Infof("pub key loaded from: %s", pubKeyPem.PubKeyDir)
 		keys = append(keys, LoadPublicKey(pubKeyPem.PubKeyDir))
 	}
@@ -132,6 +144,10 @@ func (n *Node) GetClient() Clienter {
 func (n *Node) GetAddr() string {
 	return n.Addr
 }
+
+//func (n *Node) ConnectPeers() {
+//	n.client.ConnectPeers(n.Reconnect)
+//}
 
 // VerifyMessageTrusted gets signature from message and check if it's any known peer message
 func (n *Node) VerifyMessageTrusted(signature []byte) bool {
@@ -170,35 +186,6 @@ func (n *Node) Sign(data []byte) []byte {
 	return sign
 }
 
-// ConnectPeer connects to peer, if peer is offline nil the connection so it can be reconnected by other goroutine
-func (n *Node) ConnectPeer(addr string) {
-	n.log.Infof("connecting to peer: %s", addr)
-	conn, err := tls.Dial(DefaultNetworkProto, addr, n.clientTlsCtx)
-	if err != nil {
-		n.log.Errorf("failed to connect peer: %s", addr)
-		n.client.Conns[addr] = nil
-		return
-	}
-	n.client.Conns[addr] = conn
-	n.log.Infof("[ %s ] connected to %s", n.Addr, addr)
-}
-
-// ConnectPeers connect to peers from config, reconnect if connection is nil
-func (n *Node) ConnectPeers() {
-	for _, p := range n.peers {
-		n.ConnectPeer(p.Addr)
-	}
-	for {
-		time.Sleep(time.Duration(n.Reconnect) * time.Second)
-		for addr, c := range n.client.Conns {
-			if c == nil {
-				n.log.Infof("reconnecting to peer: %s", addr)
-				n.ConnectPeer(addr)
-			}
-		}
-	}
-}
-
 // Schedule schedules round timings so it can be synced between nodes
 func (n *Node) Schedule(cfg *Config) {
 	for {
@@ -211,7 +198,7 @@ func (n *Node) Schedule(cfg *Config) {
 		n.log.Infof("sync wait for: %.2f ms", float64(syncNodeWaitBeforeRoundStart/time.Millisecond))
 		time.Sleep(syncNodeWaitBeforeRoundStart)
 		// event will be dispatched every N seconds on every node if ntpd is working
-		cons.GetStartChan() <- struct{}{}
+		cons.GetStartChan() <- startTime.Unix()
 	}
 }
 
@@ -219,8 +206,9 @@ func (n *Node) Schedule(cfg *Config) {
 func (n *Node) Processing() {
 	for {
 		cons := n.Consensus
-		<-cons.GetStartChan()
+		startTimeUnix := <-cons.GetStartChan()
 		cons.FlushData()
+		cons.SetRoundStartTime(startTimeUnix)
 
 		// Send pulses to all
 		ctx, cancel1 := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
@@ -236,8 +224,8 @@ func (n *Node) Processing() {
 		ctx3, cancel3 := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
 		cons.Commit(ctx3, n)
 
-		bn := n.GetLatestBlockNumber()
-		n.SetEpoch(bn)
+		bn := n.GetLatestPulseNumber()
+		n.SetPulseNumber(bn)
 		n.log.Infof("next pulse number: %d", bn+1)
 		cancel1()
 		cancel2()
@@ -245,71 +233,34 @@ func (n *Node) Processing() {
 	}
 }
 
-// ReceiveLoop receives all messages, send them to round input channel switched by type
-func (n *Node) ReceiveLoop() {
-	ln, err := tls.Listen(DefaultNetworkProto, n.Addr, n.srvTlsCtx)
-	if err != nil {
-		n.log.Fatal(err)
-	}
+// Serve receives all messages, send them to router
+func (n *Node) StartTransport() {
+	n.transport.Serve(n)
+}
 
-	defer ln.Close()
-	n.log.Infof("Node started on %s", n.Addr)
-	for {
-		n.log.Infof("entering receiving loop")
-		conn, err := ln.Accept()
-		if err != nil {
-			n.log.Errorf("server: accept: %s", err)
-			break
+// RouteMsg routes messages to channel by type
+func (n *Node) RouteMsg(addr net.Addr, rawMsg map[string]*json.RawMessage) {
+	var msgType MsgType
+	if err := json.Unmarshal(*rawMsg["type"], &msgType); err != nil {
+		n.log.Error(err)
+	}
+	n.log.Debugf("[ %s ] received msg: %s", addr, msgType.String())
+	switch msgType {
+	case Collect:
+		var pulsePayload = PulseMessagePayload{}
+		if err := json.Unmarshal(*rawMsg["payload"], &pulsePayload); err != nil {
+			n.log.Error(err)
 		}
-		defer conn.Close()
-		n.log.Infof("server: accepted from %s", conn.RemoteAddr())
-		// TODO: verify peer certificates or check signature?
-		//tlscon, ok := conn.(*tls.Conn)
-		//if !ok {
-		//	n.log.Error("tls handshake error")
-		//}
-		//n.log.Infof("tls handshake success")
-		//state := tlscon.ConnectionState()
-		//for _, v := range state.PeerCertificates {
-		//	b, err := x509.MarshalPKIXPublicKey(v.PublicKey)
-		//	if err != nil {
-		//		n.log.Error(err)
-		//	}
-		//	n.log.Debugf("peer certificates found, pubKey: %s", string(b))
-		//}
-		go func() {
-			for {
-				var rawMsg map[string]*json.RawMessage
-				err := json.NewDecoder(conn).Decode(&rawMsg)
-				if err != nil {
-					// TODO: for now just reconnect if any error, get parsing errors and connect errors aside
-					n.log.Infof("error reading stream or decoding")
-					break
-				}
-				var msgType MsgType
-				if err := json.Unmarshal(*rawMsg["type"], &msgType); err != nil {
-					n.log.Error(err)
-				}
-				n.log.Debugf("[ %s ] received msg: %s", conn.LocalAddr(), msgType.String())
-				switch msgType {
-				case Collect:
-					var pulsePayload = PulseMessagePayload{}
-					if err := json.Unmarshal(*rawMsg["payload"], &pulsePayload); err != nil {
-						n.log.Error(err)
-					}
-					n.log.Debugf("[ %s ] parsed msg: %s:%s", conn.LocalAddr(), msgType.String(), pulsePayload.String())
-					n.Consensus.GetPulsesChan() <- pulsePayload
-				case Vector:
-					var vectorPayload = PulseVectorPayload{}
-					if err := json.Unmarshal(*rawMsg["payload"], &vectorPayload); err != nil {
-						n.log.Error(err)
-					}
-					n.log.Debugf("[ %s ] parsed msg: %s:%s", conn.LocalAddr(), msgType.String(), vectorPayload.String())
-					n.Consensus.GetVectorsChan() <- vectorPayload
-				default:
-					panic("unknown message type")
-				}
-			}
-		}()
+		n.log.Debugf("[ %s ] parsed msg: %s:%s", addr, msgType.String(), pulsePayload.String())
+		n.Consensus.GetPulsesChan() <- pulsePayload
+	case Vector:
+		var vectorPayload = PulseVectorPayload{}
+		if err := json.Unmarshal(*rawMsg["payload"], &vectorPayload); err != nil {
+			n.log.Error(err)
+		}
+		n.log.Debugf("[ %s ] parsed msg: %s:%s", addr, msgType.String(), vectorPayload.String())
+		n.Consensus.GetVectorsChan() <- vectorPayload
+	default:
+		panic("unknown message type")
 	}
 }

@@ -25,7 +25,8 @@ type Config struct {
 				Duration    int `json:"duration"`
 			} `validate:"required"`
 		}
-		Reconnect int `json:"reconnect",validate:"required"`
+		Reconnect int    `json:"reconnect" validate:"required"`
+		Transport string `json:"transport" validate:"required"`
 	}
 	Opencensus telemetry.OpencensusConfig
 	Store      struct {

@@ -19,6 +19,10 @@ const (
 type Consensus interface {
 	// Flushes pulses and vectors data
 	FlushData()
+	//GetRoundStartTime
+	GetRoundStartTime() int64
+	//SetRoundStartTime
+	SetRoundStartTime(rst int64)
 	// SendPulses sends pulse data proposals
 	SendPulses(ctx context.Context, n Noder)
 	// SendVectors sends acquired pulse vector
@@ -34,7 +38,7 @@ type Consensus interface {
 	// GetExchangeDuration exchange round duration
 	GetExchangeDuration() int
 	// GetStartChan round start channel
-	GetStartChan() chan struct{}
+	GetStartChan() chan int64
 	// GetPulsesChan pulse messages
 	GetPulsesChan() chan Messager
 	// GetVectorsChan vector messages
@@ -45,7 +49,8 @@ type PulseConsensus struct {
 	TotalNodes       int
 	CollectDuration  int
 	ExchangeDuration int
-	StartChan        chan struct{}
+	RoundStartTime   int64
+	StartChan        chan int64
 	PulsesChan       chan Messager
 	VectorChan       chan Messager
 	SelfProposal     *PulseProposal
@@ -54,6 +59,14 @@ type PulseConsensus struct {
 	MajorityData     []string
 
 	log *logger.Logger
+}
+
+func (r *PulseConsensus) GetRoundStartTime() int64 {
+	return r.RoundStartTime
+}
+
+func (r *PulseConsensus) SetRoundStartTime(rst int64) {
+	r.RoundStartTime = rst
 }
 
 type PulseVector struct {
@@ -74,7 +87,8 @@ func NewPulseConsensus(collectDuration int, exchangeDuration int, maxPulsesChan 
 		4,
 		collectDuration,
 		exchangeDuration,
-		make(chan struct{}),
+		0,
+		make(chan int64),
 		make(chan Messager, maxPulsesChan),
 		make(chan Messager, maxVectorsChan),
 		nil,
@@ -85,7 +99,7 @@ func NewPulseConsensus(collectDuration int, exchangeDuration int, maxPulsesChan 
 	}
 }
 
-func (r *PulseConsensus) GetStartChan() chan struct{} {
+func (r *PulseConsensus) GetStartChan() chan int64 {
 	return r.StartChan
 }
 
@@ -108,7 +122,7 @@ func (r *PulseConsensus) GetExchangeDuration() int {
 func (r *PulseConsensus) SendPulses(ctx context.Context, n Noder) {
 	r.log.Infof("collect round started")
 	s := n.Sign(DummyHashData)
-	pm := NewPulseMessage(n.GetAddr(), s, n.GetEpoch())
+	pm := NewPulseMessage(n.GetAddr(), s, n.GetPulseNumber(), r.GetRoundStartTime())
 	// add self entropy too
 	selfProposal := pm.Payload.PulseProposal
 	r.PulseProposals = append(r.PulseProposals, selfProposal)
@@ -123,14 +137,17 @@ func (r *PulseConsensus) FlushData() {
 	r.PulseProposals = make([]*PulseProposal, 0)
 	r.log.Debugf("flushing vector data")
 	r.PulseVectors = make([]*PulseVector, 0)
+	r.log.Debugf("recreatubg channels")
+	r.PulsesChan = make(chan Messager)
+	r.VectorChan = make(chan Messager)
 }
 
 func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
 	for {
 		select {
 		case <-ctx.Done():
-			r.log.Infof("collect round #%d ended", n.GetEpoch())
-			r.log.Debugf("proposals for round #%d: %s", n.GetEpoch(), r.PulseProposals)
+			r.log.Infof("collect round #%d ended", n.GetPulseNumber())
+			r.log.Debugf("proposals for round #%d: %s", n.GetPulseNumber(), r.PulseProposals)
 			return
 		case msg := <-r.PulsesChan:
 			signature := msg.GetSignature()
@@ -151,18 +168,18 @@ func (r *PulseConsensus) SendVectors(ctx context.Context, n Noder) {
 	pv := &PulseVector{n.GetAddr(), r.PulseProposals}
 	r.PulseVectors = append(r.PulseVectors, &PulseVector{n.GetAddr(), r.PulseProposals})
 	log.Debugf("pulse proposals: %s", r.PulseProposals)
-	if err := n.GetClient().Broadcast(ctx, NewPulseVectorMessage(n.GetAddr(), s, n.GetEpoch(), pv)); err != nil {
+	if err := n.GetClient().Broadcast(ctx, NewPulseVectorMessage(n.GetAddr(), s, n.GetPulseNumber(), r.GetRoundStartTime(), pv)); err != nil {
 		r.log.Error(err)
 	}
 }
 
 func (r *PulseConsensus) ReceiveVectors(ctx context.Context, n Noder) {
-	r.log.Infof("finalizing exchange round #%d", n.GetEpoch())
+	r.log.Infof("finalizing exchange round #%d", n.GetPulseNumber())
 	for {
 		select {
 		case <-ctx.Done():
-			r.log.Infof("exchange round #%d ended", n.GetEpoch())
-			r.log.Debugf("vectors for round #%d: %s", n.GetEpoch(), r.PulseVectors)
+			r.log.Infof("exchange round #%d ended", n.GetPulseNumber())
+			r.log.Debugf("vectors for round #%d: %s", n.GetPulseNumber(), r.PulseVectors)
 			return
 		case msg := <-r.VectorChan:
 			signature := msg.GetSignature()
@@ -177,7 +194,7 @@ func (r *PulseConsensus) ReceiveVectors(ctx context.Context, n Noder) {
 }
 
 func (r *PulseConsensus) Commit(ctx context.Context, n Noder) {
-	r.log.Infof("committing consensus data round #%d", n.GetEpoch())
+	r.log.Infof("committing consensus data round #%d", n.GetPulseNumber())
 	for {
 		select {
 		case <-ctx.Done():
