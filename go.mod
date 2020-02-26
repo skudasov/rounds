@@ -16,6 +16,7 @@ require (
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/jaegertracing/jaeger v1.15.1 // indirect
+	github.com/jfeliu007/goplantuml v1.4.0 // indirect
 	github.com/libp2p/go-reuseport v0.0.1
 	github.com/mitchellh/hashstructure v1.0.0 // indirect
 	github.com/mosuka/cete v0.1.1

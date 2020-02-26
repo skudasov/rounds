@@ -1,6 +1,9 @@
 ##### Rounds
 Simple consensus algorithms playground
 
+#### BFT
+![consensus](http://www.plantuml.com/plantuml/proxy?src=)
+
 Generate certs
 ```
 ./scripts/makecerts.sh certs *your_email*

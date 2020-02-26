@@ -1,0 +1,33 @@
+@startuml
+!define DARKBLUE
+!includeurl https://raw.githubusercontent.com/Drakemor/RedDress-PlantUML/master/style.puml
+
+!pragma teoz true
+skinparam Shadowing false
+skinparam sequenceArrowThickness 1
+
+group collect
+"Node 1" -> "Node 2": Pulse proposal
+& "Node 1" -> "Node 3": Pulse proposal
+"Node 1" <- "Node 2": Pulse proposal
+"Node 1" <- "Node 3": Pulse proposal
+end
+group exchange
+"Node 1" -> "Node 2": Pulse vectors
+& "Node 1" -> "Node 3": Pulse vectors
+"Node 1" <- "Node 2": Pulse vectors
+"Node 1" <- "Node 3": Pulse vectors
+end
+group election
+"Node 1" --> "Node 1": Elect winner pulse
+& "Node 2" --> "Node 2": Elect winner pulse
+& "Node 3" --> "Node 3": Elect winner pulse
+end
+group commit
+"Node 1" -> "Node 2": Winning pulse
+& "Node 1" -> "Node 3": Winning pulse
+"Node 1" <- "Node 2": Winning pulse confirmations
+"Node 1" <- "Node 3": Winning pulse confirmations
+"Node 1" -> "Store": Commit
+end
+@enduml
