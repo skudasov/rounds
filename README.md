@@ -2,7 +2,7 @@
 Simple consensus algorithms playground
 
 #### BFT
-![consensus](http://www.plantuml.com/plantuml/proxy?src=)
+![consensus](http://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/skudasov/rounds/master/content/consensus.puml?token=ADSE5S5AERJQIS4PYTXBXCC6MA6SY)
 
 Generate certs
 ```
