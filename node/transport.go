@@ -34,7 +34,8 @@ func (m *UDPTransport) Serve(node Noder) {
 		var rawMsg map[string]*json.RawMessage
 		err := json.NewDecoder(ln).Decode(&rawMsg)
 		if err != nil {
-			m.log.Fatal(err)
+			m.log.Infof("failed to unmarshal udp message, dropping: %s", err.Error())
+			continue
 		}
 		node.RouteMsg(ln.LocalAddr(), rawMsg)
 	}
@@ -50,7 +51,7 @@ func NewTCPTransport(tlsSrv *tls.Config) *TCPTransport {
 }
 
 func (m *TCPTransport) Serve(node Noder) {
-	ln, err := tls.Listen(DefaultNetworkProto, node.GetAddr(), m.tlsCtx)
+	ln, err := tls.Listen("tcp", node.GetAddr(), m.tlsCtx)
 	if err != nil {
 		m.log.Fatal(err)
 	}
@@ -66,20 +67,6 @@ func (m *TCPTransport) Serve(node Noder) {
 		}
 		defer conn.Close()
 		m.log.Infof("server: accepted from %s", conn.RemoteAddr())
-		// TODO: verify peer certificates or check signature?
-		//tlscon, ok := conn.(*tls.Conn)
-		//if !ok {
-		//	n.log.Error("tls handshake error")
-		//}
-		//n.log.Infof("tls handshake success")
-		//state := tlscon.ConnectionState()
-		//for _, v := range state.PeerCertificates {
-		//	b, err := x509.MarshalPKIXPublicKey(v.PublicKey)
-		//	if err != nil {
-		//		n.log.Error(err)
-		//	}
-		//	n.log.Debugf("peer certificates found, pubKey: %s", string(b))
-		//}
 		go func() {
 			for {
 				var rawMsg map[string]*json.RawMessage

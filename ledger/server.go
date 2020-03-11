@@ -31,10 +31,10 @@ func (s *server) Commit(ctx context.Context, in *pb.CommitPulseRequest) (*pb.Com
 		Timestamp:     time.Now().Unix(),
 		WinnerEntropy: in.GetEntropy(),
 	}
-	if err := s.store.CommitBlock(b); err != nil {
-		return &pb.CommitPulseResponse{Error: "error"}, nil
+	if err := s.store.CommitPulse(b); err != nil {
+		return &pb.CommitPulseResponse{Error: err.Error()}, nil
 	}
-	return &pb.CommitPulseResponse{Error: "no error"}, nil
+	return &pb.CommitPulseResponse{}, nil
 }
 
 func (s *server) GetLatestBlockEpoch(ctx context.Context, in *pb.LatestPNRequest) (*pb.LatestPNResponse, error) {
@@ -42,7 +42,7 @@ func (s *server) GetLatestBlockEpoch(ctx context.Context, in *pb.LatestPNRequest
 	if err != nil {
 		return &pb.LatestPNResponse{Error: err.Error()}, nil
 	}
-	s.log.Infof("Received latest PN request: %d", epoch)
+	s.log.Debugf("Received latest PN request: %d", epoch)
 	return &pb.LatestPNResponse{Epoch: epoch}, nil
 }
 

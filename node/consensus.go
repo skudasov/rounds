@@ -46,6 +46,7 @@ type Consensus interface {
 }
 
 type PulseConsensus struct {
+	Receiving        bool
 	TotalNodes       int
 	CollectDuration  int
 	ExchangeDuration int
@@ -84,6 +85,7 @@ func (p *PulseVector) String() string {
 
 func NewPulseConsensus(collectDuration int, exchangeDuration int, maxPulsesChan int, maxVectorsChan int) *PulseConsensus {
 	return &PulseConsensus{
+		false,
 		4,
 		collectDuration,
 		exchangeDuration,
@@ -137,9 +139,6 @@ func (r *PulseConsensus) FlushData() {
 	r.PulseProposals = make([]*PulseProposal, 0)
 	r.log.Debugf("flushing vector data")
 	r.PulseVectors = make([]*PulseVector, 0)
-	r.log.Debugf("recreatubg channels")
-	r.PulsesChan = make(chan Messager)
-	r.VectorChan = make(chan Messager)
 }
 
 func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
@@ -153,6 +152,9 @@ func (r *PulseConsensus) ReceivePulses(ctx context.Context, n Noder) {
 			signature := msg.GetSignature()
 			if n.VerifyMessageTrusted(signature) {
 				r.log.Debugf("message verified: %s", msg)
+				if msg.(PulseMessagePayload).Rst != r.GetRoundStartTime() {
+					r.log.Infof("skipping message from another round: %s", msg)
+				}
 				r.PulseProposals = append(r.PulseProposals, msg.GetPayload().(*PulseProposal))
 				continue
 			}
@@ -185,6 +187,9 @@ func (r *PulseConsensus) ReceiveVectors(ctx context.Context, n Noder) {
 			signature := msg.GetSignature()
 			if n.VerifyMessageTrusted(signature) {
 				r.log.Debugf("message verified: %s", msg)
+				if msg.(PulseVectorPayload).Rst != r.GetRoundStartTime() {
+					r.log.Infof("skipping message from another round: %s", msg)
+				}
 				r.PulseVectors = append(r.PulseVectors, msg.GetPayload().(*PulseVector))
 				continue
 			}
@@ -215,7 +220,7 @@ func (r *PulseConsensus) Commit(ctx context.Context, n Noder) {
 					time.Now().Unix(),
 					buf.Bytes(),
 				}
-				r.log.Debugf("committing block: %v", b)
+				r.log.Debugf("committing pulse: %v", b)
 				if err := n.Commit(context.Background(), b); err != nil {
 					r.log.Error(ErrStorageConnection(err))
 				}

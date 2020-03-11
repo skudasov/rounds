@@ -10,7 +10,7 @@ import (
 
 type Storer interface {
 	GetLatestBlockEpoch() (uint64, error)
-	CommitBlock(block *node.Block) error
+	CommitPulse(block *node.Block) error
 }
 
 type BadgerStore struct {
@@ -19,8 +19,8 @@ type BadgerStore struct {
 	log *logger.Logger
 }
 
-func (m *BadgerStore) CommitBlock(b *node.Block) error {
-	m.log.Infof("committing block: %s", b.String())
+func (m *BadgerStore) CommitPulse(b *node.Block) error {
+	m.log.Infof("committing pulse: %s", b.String())
 	epoch := make([]byte, 64)
 	binary.BigEndian.PutUint64(epoch, b.Epoch)
 	if err := m.db.Update(func(txn *badger.Txn) error {

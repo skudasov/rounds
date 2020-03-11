@@ -11,13 +11,13 @@ node:
   rounds:
     paceMs: 2000
     collect:
-      max_messages: 200
+      max_messages: 500
       duration: 500
     exchange:
-      max_messages: 200
+      max_messages: 500
       duration: 500
   reconnect: 5
-  transport: tcp
+  transport: udp
 store:
   host: 0.0.0.0:5050
 opencensus:
@@ -30,5 +30,5 @@ opencensus:
   zpages:
     port: 12002
 logging:
-  level: debug
+  level: info
   encoding: console

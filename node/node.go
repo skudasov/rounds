@@ -14,8 +14,7 @@ import (
 )
 
 var (
-	DefaultNetworkProto = "tcp"
-	DummyHashData       = []byte("dummy")
+	DummyHashData = []byte("dummy")
 )
 
 // Noder describes pulse consensus node
@@ -36,9 +35,9 @@ type Noder interface {
 	GetLatestPulseNumber() uint64
 	// GetPulseNumber
 	GetPulseNumber() uint64
-	//SetPulseNumber
+	// SetPulseNumber
 	SetPulseNumber(epoch uint64)
-	//RouteMsg
+	// RouteMsg
 	RouteMsg(addr net.Addr, rawMsg map[string]*json.RawMessage)
 }
 
@@ -46,6 +45,7 @@ type Node struct {
 	privateKey      *ecdsa.PrivateKey
 	publicKey       *ecdsa.PublicKey
 	publicKeyPem    string
+	receiving       bool
 	transport       Transport
 	Addr            string
 	Reconnect       int
@@ -80,6 +80,7 @@ func NewNode(c *Config, priv *ecdsa.PrivateKey, pub *ecdsa.PublicKey, pubPem str
 		priv,
 		pub,
 		pubPem,
+		false,
 		transport,
 		c.Node.Addr,
 		c.Node.Reconnect,
@@ -220,7 +221,7 @@ func (n *Node) Processing() {
 		cons.SendVectors(ctx2, n)
 		cons.ReceiveVectors(ctx2, n)
 
-		// Calculate data set and blame malicious nodes
+		// Calculate approved data set
 		ctx3, cancel3 := context.WithTimeout(context.Background(), time.Duration(cons.GetCollectDuration())*time.Millisecond)
 		cons.Commit(ctx3, n)
 
@@ -261,6 +262,6 @@ func (n *Node) RouteMsg(addr net.Addr, rawMsg map[string]*json.RawMessage) {
 		n.log.Debugf("[ %s ] parsed msg: %s:%s", addr, msgType.String(), vectorPayload.String())
 		n.Consensus.GetVectorsChan() <- vectorPayload
 	default:
-		panic("unknown message type")
+		n.log.Infof("unknown message type received: %s", msgType)
 	}
 }

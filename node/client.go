@@ -39,7 +39,7 @@ func NewTCPClient(c *Config, clientTlsCtx *tls.Config) *TCPClient {
 // ConnectPeer connects to peer, if peer is offline nil the connection so it can be reconnected later
 func (m *TCPClient) ConnectPeer(addr string) {
 	m.log.Infof("connecting to peer: %s", addr)
-	conn, err := tls.Dial(DefaultNetworkProto, addr, m.clientTlsCtx)
+	conn, err := tls.Dial("tcp", addr, m.clientTlsCtx)
 	if err != nil {
 		m.log.Errorf("failed to connect peer: %s", addr)
 		m.Conns[addr] = nil
