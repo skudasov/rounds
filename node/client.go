@@ -93,6 +93,7 @@ func (m *TCPClient) Broadcast(ctx context.Context, msg interface{}) error {
 				if err := c.Close(); err != nil {
 					m.log.Errorf("failed to close peer connection: %s", c.LocalAddr())
 				}
+				m.log.Errorf("failed to send msg to: %s", c.RemoteAddr())
 				m.Conns[ci] = nil
 			}
 		}(ci, c)
@@ -105,12 +106,48 @@ type UDPClient struct {
 	cfg   *Config
 	Addr  string
 	Peers []Peer
+	Conns map[string]net.Conn
 
 	log *logger.Logger
 }
 
 func NewUDPClient(c *Config) *UDPClient {
-	return &UDPClient{c, c.Node.Addr, c.Node.Peers, logger.NewLogger()}
+	client := &UDPClient{c, c.Node.Addr, c.Node.Peers, make(map[string]net.Conn), logger.NewLogger()}
+	go client.ConnectPeers(c.Node.Reconnect)
+	return client
+}
+
+// ConnectPeer connects to peer, if peer is offline nil the connection so it can be reconnected later
+func (m *UDPClient) ConnectPeer(addr string) {
+	m.log.Infof("connecting to peer: %s", addr)
+	remoteAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		m.log.Errorf("failed to resolve udp addr: %s", addr)
+	}
+	conn, err := net.DialUDP("udp", nil, remoteAddr)
+	if err != nil {
+		m.log.Errorf("failed to connect peer: %s", addr)
+		m.Conns[addr] = nil
+		return
+	}
+	m.Conns[addr] = conn
+	m.log.Infof("[ %s ] connected to %s", m.Addr, addr)
+}
+
+// ConnectPeers connect to peers from config, reconnect if connection is nil
+func (m *UDPClient) ConnectPeers(reconnect int) {
+	for _, p := range m.Peers {
+		m.ConnectPeer(p.Addr)
+	}
+	for {
+		time.Sleep(time.Duration(reconnect) * time.Second)
+		for addr, c := range m.Conns {
+			if c == nil {
+				m.log.Infof("reconnecting to peer: %s", addr)
+				m.ConnectPeer(addr)
+			}
+		}
+	}
 }
 
 // Broadcast send messages to all peers
@@ -130,20 +167,21 @@ func (m *UDPClient) Broadcast(ctx context.Context, msg interface{}) error {
 	)
 	defer span.End()
 
-	for _, p := range m.Peers {
-		go func(p Peer) {
-			m.log.Debugf("sending msg to %s: %s", p.Addr, msg)
-			RemoteAddr, err := net.ResolveUDPAddr("udp", p.Addr)
-			if err != nil {
-				m.log.Errorf("failed to resolve udp addr: %s", p.Addr)
-			}
-			c, err := net.DialUDP("udp", nil, RemoteAddr)
-			defer c.Close()
+	for ci, c := range m.Conns {
+		if c == nil {
+			continue
+		}
+		go func(ci string, c net.Conn) {
+			m.log.Debugf("sending msg to %s: %s", c.RemoteAddr(), msg)
 			err = json.NewEncoder(c).Encode(msg)
 			if err != nil {
-				m.log.Errorf("failed to send msg to: %s", p.Addr)
+				if err := c.Close(); err != nil {
+					m.log.Errorf("failed to close peer connection: %s", c.LocalAddr())
+				}
+				m.log.Errorf("failed to send msg to: %s", c.RemoteAddr())
+				m.Conns[ci] = nil
 			}
-		}(p)
+		}(ci, c)
 	}
 	stats.Record(tagCtx, BroadcastMs.M(SinceInMilliseconds(startTime)))
 	return nil
