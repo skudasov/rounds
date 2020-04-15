@@ -27,13 +27,17 @@ require (
 	github.com/prometheus/common v0.7.0
 	github.com/prometheus/procfs v0.0.8 // indirect
 	github.com/spf13/viper v1.6.1
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.5.1
+	github.com/yuin/gluamapper v0.0.0-20150323120927-d836955830e7
+	github.com/yuin/gopher-lua v0.0.0-20191220021717-ab39c6098bdb
 	go.etcd.io/etcd v3.3.18+incompatible // indirect
 	go.opencensus.io v0.22.2
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.10.0
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
 	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449 // indirect
+	golang.org/x/tools v0.0.0-20190614205625-5aca471b1d59
 	google.golang.org/genproto v0.0.0-20191206224255-0243a4be9c8f // indirect
 	google.golang.org/grpc v1.26.0
+	honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc // indirect
 )
